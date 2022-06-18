@@ -1,0 +1,185 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: words-db-secret
+  labels:
+    app: words-db
+type: Opaque
+data:
+  username: cG9zdGdyZXMK
+  password: cmVkaGF0Cg==
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: words-db-svc
+  labels:
+    app: words-db
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: words-db
+  selector:
+    app: words-db
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: words-db-deploy
+  labels:
+    app: words-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: words-db
+  template:
+    metadata:
+      labels:
+        app: words-db
+    spec:
+      containers:
+      - name: db
+        image: garycncf/words-demo-db:version2
+        imagePullPolicy: Always
+        env:
+        - name: POSTGRES_DB
+          value: "words"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: words-db-secret
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: words-db-secret
+              key: password
+        ports:
+        - containerPort: 5432
+          name: db
+        volumeMounts:
+        - name: db-data
+          mountPath: /var/lib/postgresql/data
+      securityContext:
+        runAsUser: 0
+      volumes:
+      - name: db-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: words-api-svc
+  labels:
+    app: words-api
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: words-api
+  selector:
+    app: words-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: words-api-deploy
+  labels:
+    app: words-api
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: words-api
+  template:
+    metadata:
+      labels:
+        app: words-api
+    spec:
+      containers:
+      - name: api
+        image: garycncf/words-demo-api:version2
+        imagePullPolicy: Always
+        env:
+          - name: WORDS_DB_SERVICE
+            value: words-db-svc
+          - name: WORDS_DB_DATABASE
+            value: "words"
+          - name: WORDS_DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: words-db-secret
+                key: username
+          - name: WORDS_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: words-db-secret
+                key: password
+        ports:
+        - containerPort: 8080
+          name: api
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: words-web-cm
+  labels:
+    app: words-web
+data:
+  cluster: mycluster
+  version: version2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: words-web-svc
+  labels:
+    app: words-web
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+      name: words-web
+  selector:
+    app: words-web
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: words-web-deploy
+  labels:
+    app: words-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: words-web
+  template:
+    metadata:
+      labels:
+        app: words-web
+    spec:
+      containers:
+      - name: words-web
+        image: garycncf/words-demo-web:version2
+        imagePullPolicy: Always
+        env:
+          - name: WORDS_API_SERVICE
+            value: words-api-svc
+          - name: APP_CLUSTER
+            valueFrom:
+              configMapKeyRef:
+                name: words-web-cm
+                key: cluster
+          - name: APP_VERSION
+            valueFrom:
+              configMapKeyRef:
+                name: words-web-cm
+                key: version
+        ports:
+        - containerPort: 80
+          name: words-web
+      securityContext:
+        runAsUser: 0
