@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: words-demo-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "<your-ingess-host>"
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: words-web-svc
+            port:
+              number: 80
